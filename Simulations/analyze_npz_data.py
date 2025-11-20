@@ -263,8 +263,7 @@ def main():
     
     # File path to the .npz file - try multiple possible names
     possible_files = [
-        "simulation_results_all.npz",
-        "simulation_results_all_2.npz"
+        "simulation_results_partial.npz"
     ]
     
     npz_file_path = None
@@ -298,6 +297,7 @@ def main():
     
     # Analyze the .npz file
     results = analyze_npz_file(npz_file_path)
+    
     
     if results is None:
         return
