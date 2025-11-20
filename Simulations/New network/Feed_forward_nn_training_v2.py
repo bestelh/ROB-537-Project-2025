@@ -1,12 +1,11 @@
 
-
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 import time
 
 
-def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
+def data_import(npz_file_path="simulation_results_all_11-19.npz", train_split=0.5):
     """
     Import and prepare data from the .npz simulation results file.
     
@@ -23,9 +22,9 @@ def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
     Returns:
     tuple: (x_train, y_train, x_test, y_test, s_force, normalization_params)
            - x_train: Training inputs (24 features × n_train_samples)
-           - y_train: Training targets (600 force values × n_train_samples)
+           - y_train: Training targets (576 force values × n_train_samples)
            - x_test: Test inputs (24 features × n_test_samples)
-           - y_test: Test targets (600 force values × n_test_samples)
+           - y_test: Test targets (576 force values × n_test_samples)
            - s_force: Arc length positions for force profiles
            - normalization_params: Statistics for denormalizing predictions
     """
@@ -36,6 +35,7 @@ def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
     possible_files = [
         npz_file_path,
         script_dir / npz_file_path,
+        script_dir.parent / npz_file_path,  # Look in parent Simulations folder
         Path.cwd() / npz_file_path,
         Path.cwd() / "Simulations" / npz_file_path
     ]
@@ -69,18 +69,18 @@ def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
             sim['L1_input_4'], sim['L1_def_4'], sim['L2_input_4'], sim['L2_def_4'], sim['L3_input_4'], sim['L3_def_4']
         ]
         
-        # Output: Concatenated force distributions (600 values total)
+        # Output: Concatenated force distributions (576 values total)
         forces = np.concatenate([
-            sim['f_dist_fx'],  # 200 values - Force X
-            sim['f_dist_fy'],  # 200 values - Force Y
-            sim['f_dist_fz']   # 200 values - Force Z
+            sim['f_dist_fx'],  # 192 values - Force X
+            sim['f_dist_fy'],  # 192 values - Force Y
+            sim['f_dist_fz']   # 192 values - Force Z
         ])
         
         input_features.append(inputs)
         output_forces.append(forces)
     
     X = np.array(input_features)  # Shape: (n_samples, 24)
-    Y = np.array(output_forces)   # Shape: (n_samples, 600)
+    Y = np.array(output_forces)   # Shape: (n_samples, 576)
     
     print(f"Input shape: {X.shape}")
     print(f"Output shape: {Y.shape}")
@@ -107,9 +107,9 @@ def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
     # CRITICAL: Test data is COMPLETELY SEPARATED and never used for training!
     split_idx = int(len(X) * train_split)
     x_train = X[:split_idx].T  # Shape: (24, n_train) - First 50% for training
-    y_train = Y[:split_idx].T  # Shape: (600, n_train)
+    y_train = Y[:split_idx].T  # Shape: (576, n_train)
     x_test = X[split_idx:].T   # Shape: (24, n_test) - Last 50% for testing
-    y_test = Y[split_idx:].T   # Shape: (600, n_test)
+    y_test = Y[split_idx:].T   # Shape: (576, n_test)
     
     print(f"Training set: {x_train.shape[1]} samples ({train_split*100:.0f}% of data)")
     print(f"Test set: {x_test.shape[1]} samples ({(1-train_split)*100:.0f}% of data)")
@@ -146,7 +146,9 @@ def data_import(npz_file_path="simulation_results_all.npz", train_split=0.5):
 class FeedForwardNN:
    
     
-    def __init__(self, input_size=24, hidden_size1=768, hidden_size2=512, hidden_size3=256, output_size=600, 
+    def __init__(self, input_size=24, hidden_size1=768, hidden_size2=512, hidden_size3=256, hidden_size4=128, hidden_size5=64,
+                 hidden_size6=48, hidden_size7=40, hidden_size8=32, hidden_size9=28, hidden_size10=24,
+                 hidden_size11=20, hidden_size12=18, hidden_size13=16, hidden_size14=14, hidden_size15=12, output_size=576, 
                  learning_rate=0.001, dropout_rate=0.3,
                  epochs=200, print_every=50, 
                  early_stop_patience=40, lr_decay_rate=0.9, lr_decay_every=250,
@@ -157,6 +159,18 @@ class FeedForwardNN:
         self.hidden_size1 = hidden_size1
         self.hidden_size2 = hidden_size2 if num_hidden_layers >= 2 else None
         self.hidden_size3 = hidden_size3 if num_hidden_layers >= 3 else None
+        self.hidden_size4 = hidden_size4 if num_hidden_layers >= 4 else None
+        self.hidden_size5 = hidden_size5 if num_hidden_layers >= 5 else None
+        self.hidden_size6 = hidden_size6 if num_hidden_layers >= 6 else None
+        self.hidden_size7 = hidden_size7 if num_hidden_layers >= 7 else None
+        self.hidden_size8 = hidden_size8 if num_hidden_layers >= 8 else None
+        self.hidden_size9 = hidden_size9 if num_hidden_layers >= 9 else None
+        self.hidden_size10 = hidden_size10 if num_hidden_layers >= 10 else None
+        self.hidden_size11 = hidden_size11 if num_hidden_layers >= 11 else None
+        self.hidden_size12 = hidden_size12 if num_hidden_layers >= 12 else None
+        self.hidden_size13 = hidden_size13 if num_hidden_layers >= 13 else None
+        self.hidden_size14 = hidden_size14 if num_hidden_layers >= 14 else None
+        self.hidden_size15 = hidden_size15 if num_hidden_layers >= 15 else None
         self.output_size = output_size
         self.num_hidden_layers = num_hidden_layers
         
@@ -207,6 +221,85 @@ class FeedForwardNN:
             self.b3 = np.zeros((hidden_size3, 1))
             self.w4 = np.random.randn(output_size, hidden_size3) * np.sqrt(2.0 / hidden_size3)
             self.b4 = np.zeros((output_size, 1))
+            
+        elif num_hidden_layers == 4:
+            # Four hidden layers: input → h1 → h2 → h3 → h4 → output
+            self.w2 = np.random.randn(hidden_size2, hidden_size1) * np.sqrt(2.0 / hidden_size1)
+            self.b2 = np.zeros((hidden_size2, 1))
+            self.w3 = np.random.randn(hidden_size3, hidden_size2) * np.sqrt(2.0 / hidden_size2)
+            self.b3 = np.zeros((hidden_size3, 1))
+            self.w4 = np.random.randn(hidden_size4, hidden_size3) * np.sqrt(2.0 / hidden_size3)
+            self.b4 = np.zeros((hidden_size4, 1))
+            self.w5 = np.random.randn(output_size, hidden_size4) * np.sqrt(2.0 / hidden_size4)
+            self.b5 = np.zeros((output_size, 1))
+            
+        elif num_hidden_layers >= 5:
+            # Five or more hidden layers
+            self.w2 = np.random.randn(hidden_size2, hidden_size1) * np.sqrt(2.0 / hidden_size1)
+            self.b2 = np.zeros((hidden_size2, 1))
+            self.w3 = np.random.randn(hidden_size3, hidden_size2) * np.sqrt(2.0 / hidden_size2)
+            self.b3 = np.zeros((hidden_size3, 1))
+            self.w4 = np.random.randn(hidden_size4, hidden_size3) * np.sqrt(2.0 / hidden_size3)
+            self.b4 = np.zeros((hidden_size4, 1))
+            self.w5 = np.random.randn(hidden_size5, hidden_size4) * np.sqrt(2.0 / hidden_size4)
+            self.b5 = np.zeros((hidden_size5, 1))
+            
+            if num_hidden_layers >= 6:
+                self.w6 = np.random.randn(hidden_size6, hidden_size5) * np.sqrt(2.0 / hidden_size5)
+                self.b6 = np.zeros((hidden_size6, 1))
+            if num_hidden_layers >= 7:
+                self.w7 = np.random.randn(hidden_size7, hidden_size6) * np.sqrt(2.0 / hidden_size6)
+                self.b7 = np.zeros((hidden_size7, 1))
+            if num_hidden_layers >= 8:
+                self.w8 = np.random.randn(hidden_size8, hidden_size7) * np.sqrt(2.0 / hidden_size7)
+                self.b8 = np.zeros((hidden_size8, 1))
+            if num_hidden_layers >= 9:
+                self.w9 = np.random.randn(hidden_size9, hidden_size8) * np.sqrt(2.0 / hidden_size8)
+                self.b9 = np.zeros((hidden_size9, 1))
+            if num_hidden_layers >= 10:
+                self.w10 = np.random.randn(hidden_size10, hidden_size9) * np.sqrt(2.0 / hidden_size9)
+                self.b10 = np.zeros((hidden_size10, 1))
+            if num_hidden_layers >= 11:
+                self.w11 = np.random.randn(hidden_size11, hidden_size10) * np.sqrt(2.0 / hidden_size10)
+                self.b11 = np.zeros((hidden_size11, 1))
+            if num_hidden_layers >= 12:
+                self.w12 = np.random.randn(hidden_size12, hidden_size11) * np.sqrt(2.0 / hidden_size11)
+                self.b12 = np.zeros((hidden_size12, 1))
+            if num_hidden_layers >= 13:
+                self.w13 = np.random.randn(hidden_size13, hidden_size12) * np.sqrt(2.0 / hidden_size12)
+                self.b13 = np.zeros((hidden_size13, 1))
+            if num_hidden_layers >= 14:
+                self.w14 = np.random.randn(hidden_size14, hidden_size13) * np.sqrt(2.0 / hidden_size13)
+                self.b14 = np.zeros((hidden_size14, 1))
+            if num_hidden_layers >= 15:
+                self.w15 = np.random.randn(hidden_size15, hidden_size14) * np.sqrt(2.0 / hidden_size14)
+                self.b15 = np.zeros((hidden_size15, 1))
+            
+            # Output layer - connect from the last hidden layer to output
+            if num_hidden_layers == 5:
+                self.w_out = np.random.randn(output_size, hidden_size5) * np.sqrt(2.0 / hidden_size5)
+            elif num_hidden_layers == 6:
+                self.w_out = np.random.randn(output_size, hidden_size6) * np.sqrt(2.0 / hidden_size6)
+            elif num_hidden_layers == 7:
+                self.w_out = np.random.randn(output_size, hidden_size7) * np.sqrt(2.0 / hidden_size7)
+            elif num_hidden_layers == 8:
+                self.w_out = np.random.randn(output_size, hidden_size8) * np.sqrt(2.0 / hidden_size8)
+            elif num_hidden_layers == 9:
+                self.w_out = np.random.randn(output_size, hidden_size9) * np.sqrt(2.0 / hidden_size9)
+            elif num_hidden_layers == 10:
+                self.w_out = np.random.randn(output_size, hidden_size10) * np.sqrt(2.0 / hidden_size10)
+            elif num_hidden_layers == 11:
+                self.w_out = np.random.randn(output_size, hidden_size11) * np.sqrt(2.0 / hidden_size11)
+            elif num_hidden_layers == 12:
+                self.w_out = np.random.randn(output_size, hidden_size12) * np.sqrt(2.0 / hidden_size12)
+            elif num_hidden_layers == 13:
+                self.w_out = np.random.randn(output_size, hidden_size13) * np.sqrt(2.0 / hidden_size13)
+            elif num_hidden_layers == 14:
+                self.w_out = np.random.randn(output_size, hidden_size14) * np.sqrt(2.0 / hidden_size14)
+            elif num_hidden_layers == 15:
+                self.w_out = np.random.randn(output_size, hidden_size15) * np.sqrt(2.0 / hidden_size15)
+            
+            self.b_out = np.zeros((output_size, 1))
         
         # Training history
         self.train_losses = []
@@ -214,22 +307,42 @@ class FeedForwardNN:
         
         print(f"Initialized FeedForwardNN with hyperparameters:")
         
-        # Display architecture based on number of layers
-        if num_hidden_layers == 1:
-            print(f"  Architecture: {input_size} → {hidden_size1} → {output_size}")
-            total_params = (input_size * hidden_size1 + hidden_size1 * output_size)
-        elif num_hidden_layers == 2:
-            print(f"  Architecture: {input_size} → {hidden_size1} → {hidden_size2} → {output_size}")
-            total_params = (input_size * hidden_size1 + hidden_size1 * hidden_size2 + hidden_size2 * output_size)
-        elif num_hidden_layers == 3:
-            print(f"  Architecture: {input_size} → {hidden_size1} → {hidden_size2} → {hidden_size3} → {output_size}")
-            total_params = (input_size * hidden_size1 + hidden_size1 * hidden_size2 + 
-                          hidden_size2 * hidden_size3 + hidden_size3 * output_size)
+        # Display architecture dynamically
+        arch_str = f"  Architecture: {input_size}"
+        total_params = input_size * hidden_size1  # Input to first hidden layer
+        
+        # Add all hidden layers
+        for layer_num in range(1, num_hidden_layers + 1):
+            hidden_size = getattr(self, f'hidden_size{layer_num}')
+            arch_str += f" → {hidden_size}"
+            
+            # Calculate parameters for this layer
+            if layer_num > 1:
+                prev_hidden_size = getattr(self, f'hidden_size{layer_num-1}')
+                total_params += prev_hidden_size * hidden_size
+        
+        # Add output layer
+        arch_str += f" → {output_size}"
+        last_hidden_size = getattr(self, f'hidden_size{num_hidden_layers}')
+        total_params += last_hidden_size * output_size
+        
+        print(arch_str)
         print(f"  Total parameters: ~{total_params:,}")
         print(f"  Learning rate: {learning_rate} (decay: {lr_decay_rate} every {lr_decay_every} epochs)")
         print(f"  Training: {epochs} epochs")
         print(f"  Regularization: dropout {dropout_rate}")
         print(f"  Early stopping: patience {early_stop_patience}")
+    
+    def sigmoid_activation(self, x):
+        """Sigmoid activation function"""
+        # Clip x to prevent overflow
+        x_clipped = np.clip(x, -500, 500)
+        return 1 / (1 + np.exp(-x_clipped))
+    
+    def sigmoid_derivative(self, x):
+        """Derivative of sigmoid activation"""
+        s = self.sigmoid_activation(x)
+        return s * (1 - s)
     
     def tanh_activation(self, x):
         """Tanh activation function"""
@@ -252,6 +365,19 @@ class FeedForwardNN:
         """Linear activation function (for output layer)"""
         return x
     
+    def swish_activation(self, x):
+        """Swish activation function: x * sigmoid(x)"""
+        # Clip x to prevent overflow in sigmoid
+        x_clipped = np.clip(x, -500, 500)
+        sigmoid_x = 1 / (1 + np.exp(-x_clipped))
+        return x * sigmoid_x
+    
+    def swish_derivative(self, x):
+        """Derivative of Swish activation"""
+        x_clipped = np.clip(x, -500, 500)
+        sigmoid_x = 1 / (1 + np.exp(-x_clipped))
+        return sigmoid_x + x * sigmoid_x * (1 - sigmoid_x)
+    
     def dropout_mask(self, shape, training=True):# dropout mask randomly turns off neurons during training
         """Generate dropout mask during training"""
         if not training or self.dropout_rate == 0:
@@ -260,219 +386,144 @@ class FeedForwardNN:
         return mask
     
     def forward_pass(self, x, training=True):
-      
-        # First hidden layer (always present)
+        """Dynamic forward pass that handles any number of hidden layers"""
+        
+        # Store all layer outputs and dropout masks
+        z_layers = []
+        a_layers = []
+        dropout_masks = []
+        
+        # First hidden layer
         z1 = self.w1 @ x + self.b1
         a1 = self.tanh_activation(z1)
         dropout_mask1 = self.dropout_mask(a1.shape, training)
         a1_dropout = a1 * dropout_mask1
         
-        if self.num_hidden_layers == 1:
-            # Single layer: input → h1 → output
-            z2 = self.w2 @ a1_dropout + self.b2
-            a2 = self.linear_activation(z2)
-            return z1, a1, z2, a2, dropout_mask1
+        z_layers.append(z1)
+        a_layers.append(a1)
+        dropout_masks.append(dropout_mask1)
+        
+        current_input = a1_dropout
+        
+        # Process remaining hidden layers dynamically
+        for layer_num in range(2, self.num_hidden_layers + 1):
+            w = getattr(self, f'w{layer_num}')
+            b = getattr(self, f'b{layer_num}')
             
-        elif self.num_hidden_layers == 2:
-            # Two layers: input → h1 → h2 → output
-            z2 = self.w2 @ a1_dropout + self.b2
-            a2 = self.tanh_activation(z2)
-            dropout_mask2 = self.dropout_mask(a2.shape, training)
-            a2_dropout = a2 * dropout_mask2
+            z = w @ current_input + b
+            a = self.tanh_activation(z)
+            dropout_mask = self.dropout_mask(a.shape, training)
+            a_dropout = a * dropout_mask
             
-            z3 = self.w3 @ a2_dropout + self.b3
-            a3 = self.linear_activation(z3)
-            return z1, a1, z2, a2, z3, a3, dropout_mask1, dropout_mask2
+            z_layers.append(z)
+            a_layers.append(a)
+            dropout_masks.append(dropout_mask)
             
-        elif self.num_hidden_layers == 3:
-            # Three layers: input → h1 → h2 → h3 → output
-            z2 = self.w2 @ a1_dropout + self.b2
-            a2 = self.tanh_activation(z2)
-            dropout_mask2 = self.dropout_mask(a2.shape, training)
-            a2_dropout = a2 * dropout_mask2
-            
-            z3 = self.w3 @ a2_dropout + self.b3
-            a3 = self.tanh_activation(z3)
-            dropout_mask3 = self.dropout_mask(a3.shape, training)
-            a3_dropout = a3 * dropout_mask3
-            
-            z4 = self.w4 @ a3_dropout + self.b4
-            a4 = self.linear_activation(z4)
-            return z1, a1, z2, a2, z3, a3, z4, a4, dropout_mask1, dropout_mask2, dropout_mask3
+            current_input = a_dropout
+        
+        # Output layer
+        z_out = self.w_out @ current_input + self.b_out
+        a_out = self.linear_activation(z_out)
+        
+        z_layers.append(z_out)
+        a_layers.append(a_out)
+        
+        return z_layers, a_layers, dropout_masks
     
     def backward_pass(self, x, y, forward_results):
+        """Dynamic backward pass that handles any number of hidden layers"""
+        z_layers, a_layers, dropout_masks = forward_results
         n_samples = x.shape[1]
         
-        if self.num_hidden_layers == 1:
-            z1, a1, z2, a2, dropout_mask1 = forward_results
+        # Initialize gradients storage
+        weight_gradients = {}
+        bias_gradients = {}
+        
+        # Output layer gradients (last layer is always output)
+        error_output = a_layers[-1] - y
+        delta_current = error_output / n_samples
+        
+        # Output layer weight and bias gradients
+        if self.num_hidden_layers > 0:
+            a_prev_dropout = a_layers[-2] * dropout_masks[-1]  # Last hidden layer with dropout
+            weight_gradients['w_out'] = delta_current @ a_prev_dropout.T
+        else:
+            weight_gradients['w_out'] = delta_current @ x.T
+        bias_gradients['b_out'] = np.sum(delta_current, axis=1, keepdims=True)
+        
+        # Backpropagate through hidden layers (in reverse order)
+        for layer_idx in range(self.num_hidden_layers, 0, -1):
+            if layer_idx == self.num_hidden_layers:
+                # Last hidden layer connects to output
+                w_next = self.w_out
+            else:
+                # Hidden layers connect to next hidden layer
+                w_next = getattr(self, f'w{layer_idx + 1}')
             
-            # Output layer gradients
-            error_output = a2 - y
-            delta_output = error_output / n_samples
+            # Compute error and delta for current hidden layer
+            error_hidden = w_next.T @ delta_current
+            error_hidden *= dropout_masks[layer_idx - 1]  # Apply dropout mask
+            delta_current = error_hidden * self.tanh_derivative(z_layers[layer_idx - 1])
             
-            # First hidden layer gradients
-            a1_dropout = a1 * dropout_mask1
-            error_hidden1 = self.w2.T @ delta_output
-            error_hidden1 *= dropout_mask1
-            delta_hidden1 = error_hidden1 * self.tanh_derivative(z1)
+            # Compute weight and bias gradients
+            if layer_idx == 1:
+                # First hidden layer connects to input
+                input_to_layer = x
+            else:
+                # Other hidden layers connect to previous hidden layer
+                input_to_layer = a_layers[layer_idx - 2] * dropout_masks[layer_idx - 2]
             
-            # Weight and bias gradients
-            dw2 = delta_output @ a1_dropout.T
-            db2 = np.sum(delta_output, axis=1, keepdims=True)
-            dw1 = delta_hidden1 @ x.T
-            db1 = np.sum(delta_hidden1, axis=1, keepdims=True)
-            
-            return dw1, db1, dw2, db2
-            
-        elif self.num_hidden_layers == 2:
-            z1, a1, z2, a2, z3, a3, dropout_mask1, dropout_mask2 = forward_results
-            
-            # Output layer gradients
-            error_output = a3 - y
-            delta_output = error_output / n_samples
-            
-            # Second hidden layer gradients
-            a2_dropout = a2 * dropout_mask2
-            error_hidden2 = self.w3.T @ delta_output
-            error_hidden2 *= dropout_mask2
-            delta_hidden2 = error_hidden2 * self.tanh_derivative(z2)
-            
-            # First hidden layer gradients
-            a1_dropout = a1 * dropout_mask1
-            error_hidden1 = self.w2.T @ delta_hidden2
-            error_hidden1 *= dropout_mask1
-            delta_hidden1 = error_hidden1 * self.tanh_derivative(z1)
-            
-            # Weight and bias gradients
-            dw3 = delta_output @ a2_dropout.T
-            db3 = np.sum(delta_output, axis=1, keepdims=True)
-            dw2 = delta_hidden2 @ a1_dropout.T
-            db2 = np.sum(delta_hidden2, axis=1, keepdims=True)
-            dw1 = delta_hidden1 @ x.T
-            db1 = np.sum(delta_hidden1, axis=1, keepdims=True)
-            
-            return dw1, db1, dw2, db2, dw3, db3
-            
-        elif self.num_hidden_layers == 3:
-            z1, a1, z2, a2, z3, a3, z4, a4, dropout_mask1, dropout_mask2, dropout_mask3 = forward_results
-            
-            # Output layer gradients
-            error_output = a4 - y
-            delta_output = error_output / n_samples
-            
-            # Third hidden layer gradients
-            a3_dropout = a3 * dropout_mask3
-            error_hidden3 = self.w4.T @ delta_output
-            error_hidden3 *= dropout_mask3
-            delta_hidden3 = error_hidden3 * self.tanh_derivative(z3)
-            
-            # Second hidden layer gradients
-            a2_dropout = a2 * dropout_mask2
-            error_hidden2 = self.w3.T @ delta_hidden3
-            error_hidden2 *= dropout_mask2
-            delta_hidden2 = error_hidden2 * self.tanh_derivative(z2)
-            
-            # First hidden layer gradients
-            a1_dropout = a1 * dropout_mask1
-            error_hidden1 = self.w2.T @ delta_hidden2
-            error_hidden1 *= dropout_mask1
-            delta_hidden1 = error_hidden1 * self.tanh_derivative(z1)
-
-            # Weight and bias gradients
-            dw4 = delta_output @ a3_dropout.T
-            db4 = np.sum(delta_output, axis=1, keepdims=True)
-            dw3 = delta_hidden3 @ a2_dropout.T
-            db3 = np.sum(delta_hidden3, axis=1, keepdims=True)
-            dw2 = delta_hidden2 @ a1_dropout.T
-            db2 = np.sum(delta_hidden2, axis=1, keepdims=True)
-            dw1 = delta_hidden1 @ x.T
-            db1 = np.sum(delta_hidden1, axis=1, keepdims=True)
-            
-            return dw1, db1, dw2, db2, dw3, db3, dw4, db4
+            weight_gradients[f'w{layer_idx}'] = delta_current @ input_to_layer.T
+            bias_gradients[f'b{layer_idx}'] = np.sum(delta_current, axis=1, keepdims=True)
+        
+        return weight_gradients, bias_gradients
     
     def update_weights(self, gradients):
-        if self.num_hidden_layers == 1:
-            dw1, db1, dw2, db2 = gradients
+        """Dynamic weight update that handles any number of hidden layers"""
+        weight_gradients, bias_gradients = gradients
+        
+        # Update all hidden layer weights and biases
+        for layer_num in range(1, self.num_hidden_layers + 1):
+            w_key = f'w{layer_num}'
+            b_key = f'b{layer_num}'
             
-            # Gradient clipping
-            dw1 = np.clip(dw1, -self.max_grad_norm, self.max_grad_norm)
-            dw2 = np.clip(dw2, -self.max_grad_norm, self.max_grad_norm)
-            db1 = np.clip(db1, -self.max_grad_norm, self.max_grad_norm)
-            db2 = np.clip(db2, -self.max_grad_norm, self.max_grad_norm)
+            if w_key in weight_gradients:
+                # Gradient clipping
+                dw = np.clip(weight_gradients[w_key], -self.max_grad_norm, self.max_grad_norm)
+                db = np.clip(bias_gradients[b_key], -self.max_grad_norm, self.max_grad_norm)
+                
+                # Update weights and biases
+                w_attr = getattr(self, w_key)
+                b_attr = getattr(self, b_key)
+                setattr(self, w_key, w_attr - self.learning_rate * dw)
+                setattr(self, b_key, b_attr - self.learning_rate * db)
+                
+                # Weight clipping for stability
+                w_updated = getattr(self, w_key)
+                setattr(self, w_key, np.clip(w_updated, -self.weight_clip_value, self.weight_clip_value))
+        
+        # Update output layer weights and biases
+        if 'w_out' in weight_gradients:
+            dw_out = np.clip(weight_gradients['w_out'], -self.max_grad_norm, self.max_grad_norm)
+            db_out = np.clip(bias_gradients['b_out'], -self.max_grad_norm, self.max_grad_norm)
             
-            # Update weights and biases
-            self.w1 -= self.learning_rate * dw1
-            self.w2 -= self.learning_rate * dw2
-            self.b1 -= self.learning_rate * db1
-            self.b2 -= self.learning_rate * db2
-            
-            # Weight clipping for stability
-            self.w1 = np.clip(self.w1, -self.weight_clip_value, self.weight_clip_value)
-            self.w2 = np.clip(self.w2, -self.weight_clip_value, self.weight_clip_value)
-            
-        elif self.num_hidden_layers == 2:
-            dw1, db1, dw2, db2, dw3, db3 = gradients
-            
-            # Gradient clipping
-            dw1 = np.clip(dw1, -self.max_grad_norm, self.max_grad_norm)
-            dw2 = np.clip(dw2, -self.max_grad_norm, self.max_grad_norm)
-            dw3 = np.clip(dw3, -self.max_grad_norm, self.max_grad_norm)
-            db1 = np.clip(db1, -self.max_grad_norm, self.max_grad_norm)
-            db2 = np.clip(db2, -self.max_grad_norm, self.max_grad_norm)
-            db3 = np.clip(db3, -self.max_grad_norm, self.max_grad_norm)
-            
-            # Update weights and biases
-            self.w1 -= self.learning_rate * dw1
-            self.w2 -= self.learning_rate * dw2
-            self.w3 -= self.learning_rate * dw3
-            self.b1 -= self.learning_rate * db1
-            self.b2 -= self.learning_rate * db2
-            self.b3 -= self.learning_rate * db3
+            self.w_out -= self.learning_rate * dw_out
+            self.b_out -= self.learning_rate * db_out
             
             # Weight clipping for stability
-            self.w1 = np.clip(self.w1, -self.weight_clip_value, self.weight_clip_value)
-            self.w2 = np.clip(self.w2, -self.weight_clip_value, self.weight_clip_value)
-            self.w3 = np.clip(self.w3, -self.weight_clip_value, self.weight_clip_value)
-            
-        elif self.num_hidden_layers == 3:
-            dw1, db1, dw2, db2, dw3, db3, dw4, db4 = gradients
-            
-            # Gradient clipping
-            dw1 = np.clip(dw1, -self.max_grad_norm, self.max_grad_norm)
-            dw2 = np.clip(dw2, -self.max_grad_norm, self.max_grad_norm)
-            dw3 = np.clip(dw3, -self.max_grad_norm, self.max_grad_norm)
-            dw4 = np.clip(dw4, -self.max_grad_norm, self.max_grad_norm)
-            db1 = np.clip(db1, -self.max_grad_norm, self.max_grad_norm)
-            db2 = np.clip(db2, -self.max_grad_norm, self.max_grad_norm)
-            db3 = np.clip(db3, -self.max_grad_norm, self.max_grad_norm)
-            db4 = np.clip(db4, -self.max_grad_norm, self.max_grad_norm)
-            
-            # Update weights and biases
-            self.w1 -= self.learning_rate * dw1
-            self.w2 -= self.learning_rate * dw2
-            self.w3 -= self.learning_rate * dw3
-            self.w4 -= self.learning_rate * dw4
-            self.b1 -= self.learning_rate * db1
-            self.b2 -= self.learning_rate * db2
-            self.b3 -= self.learning_rate * db3
-            self.b4 -= self.learning_rate * db4
-            
-            # Weight clipping for stability
-            self.w1 = np.clip(self.w1, -self.weight_clip_value, self.weight_clip_value)
-            self.w2 = np.clip(self.w2, -self.weight_clip_value, self.weight_clip_value)
-            self.w3 = np.clip(self.w3, -self.weight_clip_value, self.weight_clip_value)
-            self.w4 = np.clip(self.w4, -self.weight_clip_value, self.weight_clip_value)
+            self.w_out = np.clip(self.w_out, -self.weight_clip_value, self.weight_clip_value)
     
-    def train_epoch(self, x_train, y_train):
+    def train_epoch(self, x_train, y_train, batch_size=32):
         """
-        Train the network for one epoch using full dataset.
+        Train the network for one epoch using mini-batches.
         
         Parameters:
         x_train (ndarray): Training inputs
         y_train (ndarray): Training targets
+        batch_size (int): Size of mini-batches
         
         Returns:
-        float: Loss for the epoch
+        float: Average loss for the epoch
         """
         # Shuffle training data
         n_train = x_train.shape[1]
@@ -480,27 +531,34 @@ class FeedForwardNN:
         x_shuffled = x_train[:, indices]
         y_shuffled = y_train[:, indices]
         
-        # Forward pass with dropout
-        forward_results = self.forward_pass(x_shuffled, training=True)
+        epoch_losses = []
         
-        # Calculate loss
-        if self.num_hidden_layers == 1:
-            final_output = forward_results[3]  # a2
-        elif self.num_hidden_layers == 2:
-            final_output = forward_results[5]  # a3
-        elif self.num_hidden_layers == 3:
-            final_output = forward_results[7]  # a4
+        # Process data in batches
+        for batch_start in range(0, n_train, batch_size):
+            batch_end = min(batch_start + batch_size, n_train)
+            
+            # Extract batch
+            x_batch = x_shuffled[:, batch_start:batch_end]
+            y_batch = y_shuffled[:, batch_start:batch_end]
+            
+            # Forward pass with dropout
+            forward_results = self.forward_pass(x_batch, training=True)
+            z_layers, a_layers, dropout_masks = forward_results
+            
+            # Calculate loss
+            final_output = a_layers[-1]  # Last layer is always the output
+            error = final_output - y_batch
+            batch_loss = np.mean(error ** 2)
+            epoch_losses.append(batch_loss)
+            
+            # Backward pass
+            gradients = self.backward_pass(x_batch, y_batch, forward_results)
+            
+            # Update weights
+            self.update_weights(gradients)
         
-        error = final_output - y_shuffled
-        mse_loss = np.mean(error ** 2)
-        
-        # Backward pass
-        gradients = self.backward_pass(x_shuffled, y_shuffled, forward_results)
-        
-        # Update weights
-        self.update_weights(gradients)
-        
-        return mse_loss
+        # Return average loss across all batches
+        return np.mean(epoch_losses)
     
     def evaluate(self, x_test, y_test, max_samples=500):
         """
@@ -524,13 +582,8 @@ class FeedForwardNN:
             y_test_sample = y_test
         
         # Forward pass only (no dropout during evaluation)
-        forward_results = self.forward_pass(x_test_sample, training=False)
-        if self.num_hidden_layers == 1:
-            final_output = forward_results[3]  # a2
-        elif self.num_hidden_layers == 2:
-            final_output = forward_results[5]  # a3
-        elif self.num_hidden_layers == 3:
-            final_output = forward_results[7]  # a4
+        z_layers, a_layers, dropout_masks = self.forward_pass(x_test_sample, training=False)
+        final_output = a_layers[-1]  # Last layer is always the output
         
         # Calculate loss
         error = final_output - y_test_sample
@@ -538,10 +591,11 @@ class FeedForwardNN:
         
         return test_loss
     
-    def train(self, x_train, y_train, x_test, y_test):
+    def train(self, x_train, y_train, x_test, y_test, batch_size=32):
        
         print(f"\nStarting training with current hyperparameters:")
         print(f"  Epochs: {self.epochs}")
+        print(f"  Batch size: {batch_size}")
         print(f"  Learning rate: {self.learning_rate} (initial)")
         print(f"  Regularization: dropout {self.dropout_rate}")
         print(f"  Early stopping patience: {self.early_stop_patience}")
@@ -559,8 +613,8 @@ class FeedForwardNN:
             # Track timing
             epoch_start_time = time.time()
             
-            # Train one epoch
-            train_loss = self.train_epoch(x_train, y_train)
+            # Train one epoch with batching
+            train_loss = self.train_epoch(x_train, y_train, batch_size=batch_size)
             
             # Record epoch time
             epoch_time = time.time() - epoch_start_time
@@ -621,13 +675,8 @@ class FeedForwardNN:
         Returns:
         ndarray: Network predictions
         """
-        forward_results = self.forward_pass(x, training=False)
-        if self.num_hidden_layers == 1:
-            predictions = forward_results[3]  # a2
-        elif self.num_hidden_layers == 2:
-            predictions = forward_results[5]  # a3
-        elif self.num_hidden_layers == 3:
-            predictions = forward_results[7]  # a4
+        z_layers, a_layers, dropout_masks = self.forward_pass(x, training=False)
+        predictions = a_layers[-1]  # Last layer is always the output
         return predictions
     
     def save_model(self, filename, normalization_params, s_force):
@@ -641,15 +690,13 @@ class FeedForwardNN:
         """
         x_mean, x_std, y_mean, y_std = normalization_params
         
-        # Prepare model data based on architecture
+        # Prepare model data with base configuration
         model_data = {
             'w1': self.w1, 'b1': self.b1,
+            'w_out': self.w_out, 'b_out': self.b_out,
             'x_mean': x_mean, 'x_std': x_std, 'y_mean': y_mean, 'y_std': y_std,
             'network_config': {
                 'input_size': self.input_size,
-                'hidden_size1': self.hidden_size1,
-                'hidden_size2': self.hidden_size2,
-                'hidden_size3': self.hidden_size3,
                 'output_size': self.output_size,
                 'learning_rate': self.learning_rate,
                 'num_hidden_layers': self.num_hidden_layers
@@ -659,22 +706,17 @@ class FeedForwardNN:
             'test_losses': self.test_losses
         }
         
-        # Add weights based on architecture
-        if self.num_hidden_layers == 1:
-            model_data.update({
-                'w2': self.w2, 'b2': self.b2
-            })
-        elif self.num_hidden_layers == 2:
-            model_data.update({
-                'w2': self.w2, 'b2': self.b2,
-                'w3': self.w3, 'b3': self.b3
-            })
-        elif self.num_hidden_layers == 3:
-            model_data.update({
-                'w2': self.w2, 'b2': self.b2,
-                'w3': self.w3, 'b3': self.b3,
-                'w4': self.w4, 'b4': self.b4
-            })
+        # Add all hidden layer sizes to config
+        for layer_num in range(1, self.num_hidden_layers + 1):
+            model_data['network_config'][f'hidden_size{layer_num}'] = getattr(self, f'hidden_size{layer_num}')
+        
+        # Add all hidden layer weights dynamically
+        for layer_num in range(2, self.num_hidden_layers + 1):
+            w_name = f'w{layer_num}'
+            b_name = f'b{layer_num}'
+            if hasattr(self, w_name):
+                model_data[w_name] = getattr(self, w_name)
+                model_data[b_name] = getattr(self, b_name)
         
         np.savez_compressed(filename, **model_data)
         print(f"Model saved to '{filename}'")
@@ -685,27 +727,30 @@ def run_single_training():
     Run a single training session and plot results.
     """
     print("="*60)
-    print("SINGLE TRAINING SESSION")
+    print("SINGLE TRAINING SESSION - November 19th Data")
     print("="*60)
     
     try:
-        # Import data
-        x_train, y_train, x_test, y_test, s_force, norm_params = data_import()
+        # Import data from November 19th simulation results
+        x_train, y_train, x_test, y_test, s_force, norm_params = data_import("simulation_results_all_11-19.npz")
         
-        # Create and train network with three hidden layers
+        # Create and train network with fifteen hidden layers
         network = FeedForwardNN(
-            input_size=24, hidden_size1=300, hidden_size2=100, hidden_size3=100, output_size=600,
-            learning_rate=0.001, dropout_rate=0.3,
+            input_size=24, hidden_size1=300, hidden_size2=200, hidden_size3=100, 
+            hidden_size4=80, hidden_size5=60, hidden_size6=48, hidden_size7=40,
+            hidden_size8=32, hidden_size9=28, hidden_size10=24, hidden_size11=20,
+            hidden_size12=18, hidden_size13=16, hidden_size14=14, hidden_size15=12,
+            output_size=576, learning_rate=0.001, dropout_rate=0.1,
             epochs=2000, early_stop_patience=40,
-            lr_decay_rate=0.9, lr_decay_every=250, num_hidden_layers=3
+            lr_decay_rate=0.9, lr_decay_every=250, num_hidden_layers=5
         )
-        network.train(x_train, y_train, x_test, y_test)
+        network.train(x_train, y_train, x_test, y_test, batch_size=4)
         
         # Save model
-        network.save_model('trained_model_single.npz', norm_params, s_force)
+        network.save_model('trained_model_single_11-19.npz', norm_params, s_force)
         
         # Plot results
-        plot_training_results(network, x_test, y_test, s_force, norm_params, "Single Training Results")
+        plot_training_results(network, x_test, y_test, s_force, norm_params, "Single Training Results - Nov 19 Data")
         
         return network, norm_params, s_force
         
@@ -722,12 +767,12 @@ def run_multiple_training(num_runs=10):
     num_runs (int): Number of training runs to perform
     """
     print("="*60)
-    print(f"MULTIPLE TRAINING SESSIONS ({num_runs} runs)")
+    print(f"MULTIPLE TRAINING SESSIONS ({num_runs} runs) - November 19th Data")
     print("="*60)
     
     try:
-        # Import data once
-        x_train, y_train, x_test, y_test, s_force, norm_params = data_import()
+        # Import data from November 19th simulation results
+        x_train, y_train, x_test, y_test, s_force, norm_params = data_import("simulation_results_all_11-19.npz")
         
         all_networks = []
         all_final_train_losses = []
@@ -738,12 +783,12 @@ def run_multiple_training(num_runs=10):
             
             # Create new network for each run (different random initialization)
             network = FeedForwardNN(
-                input_size=24, hidden_size1=1024, output_size=600,
+                input_size=24, hidden_size1=1024, output_size=576,
                 learning_rate=0.001, dropout_rate=0.5,
                 epochs=1000, print_every=50, early_stop_patience=20,
                 lr_decay_rate=0.9, lr_decay_every=300
             )
-            network.train(x_train, y_train, x_test, y_test)
+            network.train(x_train, y_train, x_test, y_test, batch_size=32)
             
             all_networks.append(network)
             all_final_train_losses.append(network.train_losses[-1])
@@ -754,7 +799,7 @@ def run_multiple_training(num_runs=10):
         best_network = all_networks[best_idx]
         
         print(f"\n" + "="*60)
-        print("MULTIPLE TRAINING SUMMARY")
+        print("MULTIPLE TRAINING SUMMARY - November 19th Data")
         print("="*60)
         print(f"Best network: Run {best_idx+1}")
         print(f"Best test loss: {all_final_test_losses[best_idx]:.6f}")
@@ -762,7 +807,7 @@ def run_multiple_training(num_runs=10):
         print(f"Average final test loss: {np.mean(all_final_test_losses):.6f} ± {np.std(all_final_test_losses):.6f}")
         
         # Save best model
-        best_network.save_model('trained_model_best.npz', norm_params, s_force)
+        best_network.save_model('trained_model_best_11-19.npz', norm_params, s_force)
         
         # Plot results
         plot_multiple_training_results(all_networks, x_test, y_test, s_force, norm_params, best_idx)
@@ -810,8 +855,8 @@ def plot_training_results(network, x_test, y_test, s_force, norm_params, title="
     prediction = prediction * y_std.flatten() + y_mean.flatten()
     actual = actual * y_std.flatten() + y_mean.flatten()
     
-    fx_pred = prediction[:200]
-    fx_actual = actual[:200]
+    fx_pred = prediction[:192]
+    fx_actual = actual[:192]
     
     axes[1, 0].plot(s_force, fx_actual, 'r-', label='Actual Fx', linewidth=2, alpha=0.8)
     axes[1, 0].plot(s_force, fx_pred, 'b--', label='Predicted Fx', linewidth=2, alpha=0.8)
@@ -848,7 +893,7 @@ def plot_multiple_training_results(networks, x_test, y_test, s_force, norm_param
     x_mean, x_std, y_mean, y_std = norm_params
     
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle('Multiple Training Sessions Results', fontsize=16)
+    fig.suptitle('Multiple Training Sessions Results - Nov 19 Data', fontsize=16)
     
     # Plot 1: All training losses
     for i, network in enumerate(networks):
@@ -897,10 +942,10 @@ def plot_multiple_training_results(networks, x_test, y_test, s_force, norm_param
     prediction = prediction * y_std.flatten() + y_mean.flatten()
     actual = actual * y_std.flatten() + y_mean.flatten()
     
-    # Split into components
-    fx_pred, fx_actual = prediction[:200], actual[:200]
-    fy_pred, fy_actual = prediction[200:400], actual[200:400]
-    fz_pred, fz_actual = prediction[400:600], actual[400:600]
+    # Split into components (192 values each)
+    fx_pred, fx_actual = prediction[:192], actual[:192]
+    fy_pred, fy_actual = prediction[192:384], actual[192:384]
+    fz_pred, fz_actual = prediction[384:576], actual[384:576]
     
     force_components = [
         (fx_pred, fx_actual, 'Fx', 'red'),
@@ -918,12 +963,12 @@ def plot_multiple_training_results(networks, x_test, y_test, s_force, norm_param
         axes[1, i].grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('multiple_training_results.png', dpi=300, bbox_inches='tight')
+    plt.savefig('multiple_training_results_11-19.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
 if __name__ == "__main__":
-    print("Feed-forward Neural Network Training Script")
+    print("Feed-forward Neural Network Training Script - November 19th Data")
     print("Choose an option:")
     print("1. Run single training session")
     print("2. Run multiple training sessions (10 runs)")
