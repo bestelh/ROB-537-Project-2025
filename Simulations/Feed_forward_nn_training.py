@@ -155,39 +155,9 @@ class FeedForwardNN:
     
     def __init__(self, input_size=24, hidden_size1=768, hidden_size2=512, hidden_size3=256, output_size=600, 
                  learning_rate=0.001, dropout_rate=0.3, l2_reg=0.01,
-                 epochs=1000, batch_size=32, print_every=50, 
+                 epochs=200, print_every=50, 
                  early_stop_patience=40, lr_decay_rate=0.9, lr_decay_every=250,
                  max_grad_norm=1.0, weight_clip_value=10.0, num_hidden_layers=3):
-        """
-        Initialize the neural network with all hyperparameters.
-        
-        Network Architecture:
-        - input_size: Number of input features (default: 24)
-        - hidden_size1: First hidden layer neurons (default: 768) 
-        - hidden_size2: Second hidden layer neurons (default: 512)
-        - hidden_size3: Third hidden layer neurons (default: 256)
-        - output_size: Number of output neurons (default: 600)
-        - num_hidden_layers: Number of hidden layers 1/2/3 (default: 3)
-        
-        Training Parameters:
-        - learning_rate: Initial learning rate (default: 0.001)
-        - epochs: Maximum number of training epochs (default: 1000)
-        - batch_size: Mini-batch size for training (default: 32)
-        - print_every: Print progress every N epochs (default: 100)
-        
-        Regularization:
-        - dropout_rate: Dropout probability for hidden layer (default: 0.3)
-        - l2_reg: L2 regularization strength (default: 0.01)
-        - max_grad_norm: Gradient clipping threshold (default: 1.0)
-        - weight_clip_value: Weight clipping threshold (default: 10.0)
-        
-        Learning Rate Scheduling:
-        - lr_decay_rate: Learning rate decay factor (default: 0.8)
-        - lr_decay_every: Decay learning rate every N epochs (default: 200)
-        
-        Early Stopping:
-        - early_stop_patience: Stop if no improvement for N evaluations (default: 50)
-        """
         
         # Network architecture
         self.input_size = input_size
@@ -205,7 +175,6 @@ class FeedForwardNN:
         self.learning_rate = learning_rate
         self.initial_learning_rate = learning_rate  # Store original for reference
         self.epochs = epochs
-        self.batch_size = batch_size
         self.print_every = print_every
         
         # Regularization parameters
@@ -266,7 +235,7 @@ class FeedForwardNN:
                           hidden_size2 * hidden_size3 + hidden_size3 * output_size)
         print(f"  Total parameters: ~{total_params:,}")
         print(f"  Learning rate: {learning_rate} (decay: {lr_decay_rate} every {lr_decay_every} epochs)")
-        print(f"  Training: {epochs} epochs, batch size {batch_size}")
+        print(f"  Training: {epochs} epochs")
         print(f"  Regularization: dropout {dropout_rate}, L2 {l2_reg}")
         print(f"  Early stopping: patience {early_stop_patience}")
     
@@ -278,6 +247,14 @@ class FeedForwardNN:
         """Derivative of tanh activation"""
         t = np.tanh(x)
         return 1 - t * t
+    
+    def relu_activation(self, x):
+        """ReLU activation function"""
+        return np.maximum(0, x)
+    
+    def relu_derivative(self, x):
+        """Derivative of ReLU activation"""
+        return (x > 0).astype(float)
     
     def linear_activation(self, x):
         """Linear activation function (for output layer)"""
@@ -295,7 +272,7 @@ class FeedForwardNN:
         Perform forward pass through the network.
         
         Parameters:
-        x (ndarray): Input data of shape (input_size, batch_size)
+        x (ndarray): Input data of shape (input_size, n_samples)
         training (bool): Whether in training mode (applies dropout)
         
         Returns:
@@ -341,14 +318,14 @@ class FeedForwardNN:
             return z1, a1, z2, a2, z3, a3, z4, a4, dropout_mask1, dropout_mask2, dropout_mask3
     
     def backward_pass(self, x, y, forward_results):
-        batch_size = x.shape[1]
+        n_samples = x.shape[1]
         
         if self.num_hidden_layers == 1:
             z1, a1, z2, a2, dropout_mask1 = forward_results
             
             # Output layer gradients
             error_output = a2 - y
-            delta_output = error_output / batch_size
+            delta_output = error_output / n_samples
             
             # First hidden layer gradients
             a1_dropout = a1 * dropout_mask1
@@ -369,7 +346,7 @@ class FeedForwardNN:
             
             # Output layer gradients
             error_output = a3 - y
-            delta_output = error_output / batch_size
+            delta_output = error_output / n_samples
             
             # Second hidden layer gradients
             a2_dropout = a2 * dropout_mask2
@@ -384,7 +361,7 @@ class FeedForwardNN:
             delta_hidden1 = error_hidden1 * self.tanh_derivative(z1)
             
             # Weight and bias gradients with L2 regularization
-            dw3 = delta_output @ a2_dropout.T + self.l2_reg * self.w3
+            dw4 = delta_output @ a3_dropout.T + self.l2_reg * self.w4
             db3 = np.sum(delta_output, axis=1, keepdims=True)
             dw2 = delta_hidden2 @ a1_dropout.T + self.l2_reg * self.w2
             db2 = np.sum(delta_hidden2, axis=1, keepdims=True)
@@ -398,7 +375,7 @@ class FeedForwardNN:
             
             # Output layer gradients
             error_output = a4 - y
-            delta_output = error_output / batch_size
+            delta_output = error_output / n_samples
             
             # Third hidden layer gradients
             a3_dropout = a3 * dropout_mask3
@@ -417,7 +394,7 @@ class FeedForwardNN:
             error_hidden1 = self.w2.T @ delta_hidden2
             error_hidden1 *= dropout_mask1
             delta_hidden1 = error_hidden1 * self.tanh_derivative(z1)
-            
+
             # Weight and bias gradients with L2 regularization
             dw4 = delta_output @ a3_dropout.T + self.l2_reg * self.w4
             db4 = np.sum(delta_output, axis=1, keepdims=True)
@@ -505,59 +482,46 @@ class FeedForwardNN:
     
     def train_epoch(self, x_train, y_train):
         """
-        Train the network for one epoch.
+        Train the network for one epoch using full dataset.
         
         Parameters:
         x_train (ndarray): Training inputs
         y_train (ndarray): Training targets
-        batch_size (int): Batch size for mini-batch training
         
         Returns:
-        float: Average loss for the epoch
+        float: Loss for the epoch
         """
-        n_train = x_train.shape[1]
-        n_batches = max(1, n_train // self.batch_size)
-        epoch_loss = 0
-        
         # Shuffle training data
+        n_train = x_train.shape[1]
         indices = np.random.permutation(n_train)
+        x_shuffled = x_train[:, indices]
+        y_shuffled = y_train[:, indices]
         
-        for batch in range(n_batches):
-            # Get batch data
-            start_idx = batch * self.batch_size
-            end_idx = min(start_idx + self.batch_size, n_train)
-            batch_indices = indices[start_idx:end_idx]
-            
-            batch_x = x_train[:, batch_indices]
-            batch_y = y_train[:, batch_indices]
-            
-            # Forward pass with dropout
-            forward_results = self.forward_pass(batch_x, training=True)
-            
-            # Calculate loss with L2 regularization
-            if self.num_hidden_layers == 1:
-                final_output = forward_results[3]  # a2
-                l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2))
-            elif self.num_hidden_layers == 2:
-                final_output = forward_results[5]  # a3
-                l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2) + np.sum(self.w3**2))
-            elif self.num_hidden_layers == 3:
-                final_output = forward_results[7]  # a4
-                l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2) + 
-                                       np.sum(self.w3**2) + np.sum(self.w4**2))
-            
-            error = final_output - batch_y
-            mse_loss = np.mean(error ** 2)
-            loss = mse_loss + l2_loss
-            epoch_loss += mse_loss  # Only track MSE for monitoring
-            
-            # Backward pass
-            gradients = self.backward_pass(batch_x, batch_y, forward_results)
-            
-            # Update weights
-            self.update_weights(gradients)
+        # Forward pass with dropout
+        forward_results = self.forward_pass(x_shuffled, training=True)
         
-        return epoch_loss / n_batches
+        # Calculate loss with L2 regularization
+        if self.num_hidden_layers == 1:
+            final_output = forward_results[3]  # a2
+            l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2))
+        elif self.num_hidden_layers == 2:
+            final_output = forward_results[5]  # a3
+            l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2) + np.sum(self.w3**2))
+        elif self.num_hidden_layers == 3:
+            final_output = forward_results[7]  # a4
+            l2_loss = self.l2_reg * (np.sum(self.w1**2) + np.sum(self.w2**2) + 
+                                   np.sum(self.w3**2) + np.sum(self.w4**2))
+        
+        error = final_output - y_shuffled
+        mse_loss = np.mean(error ** 2)
+        
+        # Backward pass
+        gradients = self.backward_pass(x_shuffled, y_shuffled, forward_results)
+        
+        # Update weights
+        self.update_weights(gradients)
+        
+        return mse_loss
     
     def evaluate(self, x_test, y_test, max_samples=500):
         """
@@ -598,7 +562,7 @@ class FeedForwardNN:
     def train(self, x_train, y_train, x_test, y_test):
        
         print(f"\nStarting training with current hyperparameters:")
-        print(f"  Epochs: {self.epochs}, Batch size: {self.batch_size}")
+        print(f"  Epochs: {self.epochs}")
         print(f"  Learning rate: {self.learning_rate} (initial)")
         print(f"  Regularization: dropout {self.dropout_rate}, L2 {self.l2_reg}")
         print(f"  Early stopping patience: {self.early_stop_patience}")
@@ -751,9 +715,9 @@ def run_single_training():
         
         # Create and train network with three hidden layers
         network = FeedForwardNN(
-            input_size=24, hidden_size1=768, hidden_size2=512, hidden_size3=256, output_size=600,
+            input_size=24, hidden_size1=300, hidden_size2=100, hidden_size3=100, output_size=600,
             learning_rate=0.001, dropout_rate=0.3, l2_reg=0.01,
-            epochs=1000, batch_size=32, early_stop_patience=40,
+            epochs=500, early_stop_patience=40,
             lr_decay_rate=0.9, lr_decay_every=250, num_hidden_layers=3
         )
         network.train(x_train, y_train, x_test, y_test)
@@ -795,9 +759,9 @@ def run_multiple_training(num_runs=10):
             
             # Create new network for each run (different random initialization)
             network = FeedForwardNN(
-                input_size=24, hidden_size=1024, output_size=600,
+                input_size=24, hidden_size1=1024, output_size=600,
                 learning_rate=0.001, dropout_rate=0.5, l2_reg=0.02,
-                epochs=1000, batch_size=16, print_every=50, early_stop_patience=20,
+                epochs=1000, print_every=50, early_stop_patience=20,
                 lr_decay_rate=0.9, lr_decay_every=300
             )
             network.train(x_train, y_train, x_test, y_test)
