@@ -319,6 +319,20 @@ def bending_3D(EI, GJ, r, N, m, L1, L2, L3, Base_coord,
         ax.legend()
         plt.show()
     else:
+        # params2 = params.copy()
+        # params2['distributed_force_fun'] = lambda s: np.array([0.0,0.0,0.0])
+        # params2['Fext'] = np.array([0.0,0.0,0.0])
+        # params2['Mext'] = np.array([0.0,0.0,0.0])
+        # params2['n_tip'] = np.array([0.0,0.0,0.0])
+        # params2['m_tip'] = np.array([0.0,0.0,0.0])
+
+        # y_init2 = cosserat_rod_guess(s_vals, params2)
+        # sol2 = solve_bvp(lambda s, y: cosserat_rod_ode(s, y, params2),
+        #                  lambda ya, yb: cosserat_rod_bc(ya, yb, params2),
+        #                  s_vals, y_init2, tol=1e-4, max_nodes=5000)
+        # y_sol2 = sol2.sol(s_vals)
+        # p_init = y_sol2[0:3, :]
+        
         p_init = None
 
     return y_sol,p_def, p_init
@@ -423,8 +437,8 @@ def sample_spline(s, amp, num_ctrl=6):
     ctrl_vals = np.random.uniform(-amp, amp, size=num_ctrl)
     return profile_from_control_points(s, num_ctrl, ctrl_vals)
 
-def sample_gaussians(s, amp, min_bumps=1, max_bumps=5,
-                     min_width_frac=0.02, max_width_frac=0.25):
+def sample_gaussians(s, amp, min_bumps=1, max_bumps=3,
+                     min_width_frac=0.02, max_width_frac=0.05):
     
     """
     Generate a random sum of Gaussians:
@@ -497,7 +511,7 @@ def generate_random_force_profile(s, amp, method='spline', **kwargs):
     if method == 'spline':
         return sample_spline(s, amp, num_ctrl=kwargs.get('num_ctrl', 8))
     elif method == 'gaussian':
-        return sample_gaussians(s, amp, max_bumps=kwargs.get('max_bumps', 4))
+        return sample_gaussians(s, amp)
     elif method == 'fourier':
         return sample_fourier(s, amp)
     elif method == 'blocks':
@@ -518,7 +532,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 EI = 10.0        # Bending stiffness
 GJ = 0.7
 r = 5 / np.pi    # Robot radius
-N = 48          # Points per segment prolly want to mess with this
+N = 24          # Points per segment prolly want to mess with this
 m = 4            # Number of segments
 
 # Initial actuator positions
@@ -543,10 +557,10 @@ Mx, My, Mz = 0.0, 0.0, 0.0
 
 # Sampling ranges
 length_min, length_max = 4.0, 8.0
-force_min, force_max = 0.0, 0.04
+force_min, force_max = 0.0, 0.02
 
 # Number of random samples to run
-num_samples = 10000  # Adjust for compute budget
+num_samples = 100000  # Adjust for compute budget
 
 
 def single_simulation(params):
@@ -565,7 +579,7 @@ def single_simulation(params):
     # ----- Choose one profile type -----
     method = np.random.choice(
         ['spline', 'gaussian', 'fourier', 'noise'],
-        p=[0.25, 0.50, 0.20, 0.05]
+        p=[0.0, 1.0, 0.0, 0.0]
     )
 
     # ----- Generate one base profile shape (range: roughly [-1, 1]) -----
@@ -615,6 +629,11 @@ def single_simulation(params):
         result['f_dist_fz'] = fz_profile
         result['s_force'] = s_force
 
+
+        #print(p_init)
+        result['p_def'] = p_def
+        result['p_init'] = p_init
+
         return result
 
     except Exception as e:
@@ -641,7 +660,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 def main():
     params_list = generate_random_params(num_samples)
     results = []
-    max_workers = 10
+    max_workers = 14
 
     executor = ProcessPoolExecutor(max_workers=max_workers)
     futures = [executor.submit(single_simulation, p) for p in params_list]
@@ -666,7 +685,7 @@ def main():
             f.cancel()
 
         # Save partial results
-        np.savez_compressed('simulation_results_partial_11-19.npz', data=results)
+        np.savez_compressed('simulation_results_partial_11-23.npz', data=results)
         print(f"Saved {len(results)} partial results to 'simulation_results_partial.npz'")
 
     finally:
@@ -675,7 +694,7 @@ def main():
 
     # Save full results if finished normally
     if len(results) == num_samples:
-        np.savez_compressed('simulation_results_all_11-19.npz', data=results)
+        np.savez_compressed('simulation_results_all_11-23.npz', data=results)
         print(f"Saved all {len(results)} results to 'simulation_results_all.npz'")
 
 if __name__ == "__main__":
