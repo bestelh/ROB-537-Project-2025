@@ -42,10 +42,18 @@ def save_train_test_npz(npz_file_path="simulation_results_all_11-19.npz",
     # -----------------------------
     for sim in simulation_results:
         inputs = [
-            sim['L1_input_1'], sim['L1_def_1'], sim['L2_input_1'], sim['L2_def_1'], sim['L3_input_1'], sim['L3_def_1'],
-            sim['L1_input_2'], sim['L1_def_2'], sim['L2_input_2'], sim['L2_def_2'], sim['L3_input_2'], sim['L3_def_2'],
-            sim['L1_input_3'], sim['L1_def_3'], sim['L2_input_3'], sim['L2_def_3'], sim['L3_input_3'], sim['L3_def_3'],
-            sim['L1_input_4'], sim['L1_def_4'], sim['L2_input_4'], sim['L2_def_4'], sim['L3_input_4'], sim['L3_def_4']
+            sim['L1_input_1'] - sim['L1_def_1'],
+            sim['L2_input_1'] - sim['L2_def_1'],
+            sim['L3_input_1'] - sim['L3_def_1'],
+            sim['L1_input_2'] - sim['L1_def_2'],
+            sim['L2_input_2'] - sim['L2_def_2'],
+            sim['L3_input_2'] - sim['L3_def_2'],
+            sim['L1_input_3'] - sim['L1_def_3'],
+            sim['L2_input_3'] - sim['L2_def_3'],
+            sim['L3_input_3'] - sim['L3_def_3'],
+            sim['L1_input_4'] - sim['L1_def_4'],
+            sim['L2_input_4'] - sim['L2_def_4'],
+            sim['L3_input_4'] - sim['L3_def_4']
         ]
 
         forces = np.concatenate([
@@ -95,7 +103,7 @@ def save_train_test_npz(npz_file_path="simulation_results_all_11-19.npz",
 
     # Save testing data
     np.savez(
-        "testing_data_2.npz",
+        "testing_data_1.npz",
         x_test=x_test,
         y_test=y_test,
         s_force=s_force
