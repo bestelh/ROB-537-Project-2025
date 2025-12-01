@@ -156,7 +156,7 @@ def cosserat_rod_guess(s, params):
 # Main function: bending_3D
 # ---------------------------
 def bending_3D(EI, GJ, r, N, m, L1, L2, L3, Base_coord,
-               Fx, Fy, Fz, Mx, My, Mz, s_force, f_dist_vec, ploton=False):
+               Fx, Fy, Fz, Mx, My, Mz, s_force, f_dist_vec, ploton=True):
     """
     Returns (p_def, p_init)
     - L1,L2,L3 expected as sequences length m
@@ -518,7 +518,7 @@ length_min, length_max = 4.0, 8.0
 force_min, force_max = 0.0, 0.1
 
 # Number of random samples to run
-num_samples = 10000  # Adjust for compute budget
+num_samples = 1  # Adjust for compute budget
 
 
 def single_simulation(params):
@@ -556,7 +556,7 @@ def single_simulation(params):
     try:
         y_sol, p_def, p_init = bending_3D(
             EI, GJ, r, N, m, L1, L2, L3, Base_coord,
-            Fx, Fy, Fz, Mx, My, Mz, s_force, f_dist_data, False)
+            Fx, Fy, Fz, Mx, My, Mz, s_force, f_dist_data, True)
 
         L1_def, L2_def, L3_def = compute_actuator_lengths_from_solution_3D_full(
             y_sol, s_force, m, N, r, L1, L2, L3)
