@@ -207,7 +207,7 @@ class TransformerModelLoader:
             print("No training history available")
             return None
 
-def load_test_data(npz_file_path="11_30_testing.npz"):
+def load_test_data(npz_file_path="11_31_testing_hans.npz"):
     """Load test data from npz file"""
     from pathlib import Path
     
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     
     # Load test data
     try:
-        x_test, y_test = load_test_data("11_30_testing.npz")
+        x_test, y_test = load_test_data("11_31_testing_hans.npz")
         print(f"\nLoaded {x_test.shape[0]} test samples")
         
         # Calculate overall test metrics (on subset for speed)

@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import time
 from datetime import datetime, timedelta
 import random
+from pathlib import Path
+import os
 
 
 # ============================================================
@@ -296,6 +298,11 @@ class ForceEstimatorTrainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 patience_counter = 0
+                
+                # Ensure save directory exists
+                save_dir = Path(save_path).parent
+                save_dir.mkdir(parents=True, exist_ok=True)
+                
                 torch.save(self.model.state_dict(), save_path)
                 status = "✓ NEW BEST"
             else:
@@ -425,6 +432,9 @@ class ForceEstimatorTrainer:
         print("Lower errors indicate better training data fit.")
     
     def save_model_with_config(self, save_path='complete_transformer_model.pth'):
+        # Ensure save directory exists
+        save_dir = Path(save_path).parent
+        save_dir.mkdir(parents=True, exist_ok=True)
         """Save model with its configuration for easy loading"""
         model_data = {
             'model_state_dict': self.model.state_dict(),
@@ -494,7 +504,7 @@ class ForceEstimatorTrainer:
 # LOAD TRAINING DATA
 # ============================================================
 
-def load_training_data(npz_file_path="11_30_training.npz"):
+def load_training_data(npz_file_path="11_31_training_hans.npz"):
     """
     Load training data from .npz file
     
@@ -552,7 +562,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     # Load training data
-    x_train, y_train, actual_output_len = load_training_data("11_30_training.npz")
+    x_train, y_train, actual_output_len = load_training_data("11_31_training_hans.npz")
     
     # Print data shapes and some statistics
     print(f"\nTraining data statistics:")
@@ -589,6 +599,9 @@ if __name__ == "__main__":
     batch_size = 64 if device.type == 'cuda' else 32
     print(f"Using batch size: {batch_size}")
     
+    # Use path relative to current directory for saving
+    save_path = Path(__file__).parent / 'deformation_to_force_transformer.pth'
+    
     train_losses, val_losses = trainer.train_model(
         x_train, y_train,
         batch_size=batch_size,
@@ -597,11 +610,12 @@ if __name__ == "__main__":
         weight_decay=1e-5,
         val_split=0.1,
         patience=15,
-        save_path='deformation_to_force_transformer.pth'
+        save_path=str(save_path)
     )
     
-    # Save complete model with configuration
-    model_path = trainer.save_model_with_config('complete_transformer_model.pth')
+    # Save complete model with configuration  
+    complete_save_path = Path(__file__).parent / 'complete_transformer_model.pth'
+    model_path = trainer.save_model_with_config(str(complete_save_path))
     print(f"Complete model exported to: {model_path}")
     
     # Plot training curves

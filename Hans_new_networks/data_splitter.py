@@ -1,29 +1,8 @@
 import numpy as np
 from pathlib import Path
 
-def data_import(npz_file_path="simulation_results_partial_11-30.npz", train_split=0.5):
-    """
-    Import and prepare data from the .npz simulation results file.
+def data_import(npz_file_path="simulation_results_partial_11-31_hans.npz", train_split=0.5):
     
-    DATASET USAGE EXPLANATION:
-    - Total dataset: ~10,000 simulation results
-    - train_split=0.5 means 50% for training, 50% for testing
-    - Training data: ~5,000 samples (used to learn network weights)
-    - Test data: ~5,000 samples (used to evaluate performance, NEVER seen during training)
-    
-    Parameters:
-    npz_file_path (str): Path to the .npz file containing simulation results
-    train_split (float): Fraction of data to use for training (default: 0.5 = 50%)
-    
-    Returns:
-    tuple: (x_train, y_train, x_test, y_test, s_force, normalization_params)
-           - x_train: Training inputs (24 features × n_train_samples)
-           - y_train: Training targets (576 force values × n_train_samples)
-           - x_test: Test inputs (24 features × n_test_samples)
-           - y_test: Test targets (576 force values × n_test_samples)
-           - s_force: Arc length positions for force profiles
-           - normalization_params: Statistics for denormalizing predictions
-    """
     print(f"Loading data from {npz_file_path}...")
     
     # Try multiple possible file locations
@@ -112,7 +91,7 @@ def data_import(npz_file_path="simulation_results_partial_11-30.npz", train_spli
     
     # Save training data in Hans_new_networks folder
     script_dir = Path(__file__).parent
-    training_path = script_dir / "11_30_training.npz"
+    training_path = script_dir / "11_31_training_hans.npz"
     np.savez(
         training_path,
         x_train=x_train,
@@ -122,7 +101,7 @@ def data_import(npz_file_path="simulation_results_partial_11-30.npz", train_spli
     print(f"Saved training data to: {training_path}")
 
     # Save testing data in Hans_new_networks folder
-    testing_path = script_dir / "11_30_testing.npz"
+    testing_path = script_dir / "11_31_testing_hans.npz"
     np.savez(
         testing_path,
         x_test=x_test,
