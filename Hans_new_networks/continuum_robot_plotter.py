@@ -218,31 +218,216 @@ def plot_robot_shapes(p_init, p_def, s_force, f_dist_data):
     plt.show()
 
 
+def load_training_data(npz_file_path="11_30_training.npz"):
+    """
+    Load training data from .npz file
+    
+    Returns:
+        x_train: (n_samples, 12, 3) - 12 actuator tokens with [initial, deformed, difference]
+        y_train: (n_samples, 192, 3) - 192 position tokens with [fx, fy, fz]
+    """
+    from pathlib import Path
+    
+    # Try multiple possible file locations
+    script_dir = Path(__file__).parent
+    possible_files = [
+        npz_file_path,
+        script_dir / npz_file_path,
+        script_dir.parent / npz_file_path,
+        Path.cwd() / npz_file_path,
+    ]
+    
+    actual_file_path = None
+    for filepath in possible_files:
+        if Path(filepath).exists():
+            actual_file_path = str(filepath)
+            break
+    
+    if actual_file_path is None:
+        raise FileNotFoundError(f"Could not find {npz_file_path} in any of the searched locations")
+    
+    data = np.load(actual_file_path)
+    x_train = data["x_train"]  # Shape: (n_samples, 12, 3)
+    y_train = data["y_train"]  # Shape: (n_samples, 192, 3)
+    
+    print(f"Loaded training data:")
+    print(f"  Input shape: {x_train.shape} (samples, actuator_tokens, features)")
+    print(f"  Output shape: {y_train.shape} (samples, position_tokens, force_xyz)")
+    
+    return x_train, y_train
+
+def simulate_robot_from_actuators(actuator_data, n_points=64):
+    """
+    Simulate robot shape from actuator data using Cosserat rod model
+    
+    Args:
+        actuator_data: (12, 3) array - [initial, deformed, difference] for each actuator
+        n_points: number of points along the robot length
+        
+    Returns:
+        p_init: Initial shape (3, n_points)
+        p_def: Deformed shape (3, n_points)
+        s: Arc length coordinates (n_points,)
+    """
+    # Total robot length and segment parameters
+    L_total = 16.0
+    n_segments = 4
+    segment_length = L_total / n_segments
+    r_actuator = 1.5  # Actuator radius
+    s = np.linspace(0, L_total, n_points)
+    
+    # Extract actuator lengths (12 actuators in 4 segments of 3 each)
+    L_initial = actuator_data[:, 0]     # Initial lengths
+    L_deformed = actuator_data[:, 1]    # Final/deformed lengths
+    
+    # Calculate both initial and deformed shapes using segment transformations
+    p_init = np.zeros((3, n_points))
+    p_def = np.zeros((3, n_points))
+    current_transform_init = np.eye(4)
+    current_transform_def = np.eye(4)
+    
+    for i in range(n_segments):
+        # Get initial and deformed actuator lengths for this segment
+        L1_init = L_initial[i*3]
+        L2_init = L_initial[i*3 + 1] 
+        L3_init = L_initial[i*3 + 2]
+        
+        L1_def = L_deformed[i*3]
+        L2_def = L_deformed[i*3 + 1] 
+        L3_def = L_deformed[i*3 + 2]
+        
+        # Calculate transformation for initial (straight) configuration
+        T_init, _, _, _, _ = gen_transform_2(L1_init, L2_init, L3_init, r_actuator, np.eye(4))
+        
+        # Calculate transformation for deformed configuration
+        T_def, rho_k, L_ck, beta_k, theta_k = gen_transform_2(L1_def, L2_def, L3_def, r_actuator, np.eye(4))
+        
+        # Find points in this segment
+        seg_start = i * segment_length
+        seg_end = (i + 1) * segment_length
+        seg_mask = (s >= seg_start) & (s <= seg_end)
+        seg_indices = np.where(seg_mask)[0]
+        
+        if len(seg_indices) > 0:
+            # Local coordinates within the segment
+            seg_s = s[seg_mask] - seg_start
+            
+            # Calculate initial segment parameters
+            T_init, rho_k_init, L_ck_init, beta_k_init, theta_k_init = gen_transform_2(L1_init, L2_init, L3_init, r_actuator, np.eye(4))
+            
+            for j, local_s in enumerate(seg_s):
+                idx = seg_indices[j]
+                
+                # Calculate initial position
+                if abs(rho_k_init) < 1e-6:
+                    # Straight initial segment
+                    local_pos_init = np.array([0, 0, local_s])
+                else:
+                    # Curved initial segment
+                    local_beta_init = rho_k_init * local_s
+                    local_pos_init = np.array([
+                        (1.0/rho_k_init) * (1 - np.cos(local_beta_init)) * np.cos(theta_k_init),
+                        (1.0/rho_k_init) * (1 - np.cos(local_beta_init)) * np.sin(theta_k_init),
+                        (1.0/rho_k_init) * np.sin(local_beta_init)
+                    ])
+                
+                # Calculate deformed position
+                if abs(rho_k) < 1e-6:
+                    # Straight deformed segment
+                    local_pos_def = np.array([0, 0, local_s])
+                else:
+                    # Curved deformed segment
+                    local_beta = rho_k * local_s
+                    local_pos_def = np.array([
+                        (1.0/rho_k) * (1 - np.cos(local_beta)) * np.cos(theta_k),
+                        (1.0/rho_k) * (1 - np.cos(local_beta)) * np.sin(theta_k),
+                        (1.0/rho_k) * np.sin(local_beta)
+                    ])
+                
+                # Transform to global coordinates
+                local_pos_init_h = np.append(local_pos_init, 1)
+                local_pos_def_h = np.append(local_pos_def, 1)
+                
+                global_pos_init = current_transform_init @ local_pos_init_h
+                global_pos_def = current_transform_def @ local_pos_def_h
+                
+                p_init[:, idx] = global_pos_init[:3]
+                p_def[:, idx] = global_pos_def[:3]
+        
+        # Update transformations for next segment
+        current_transform_init = current_transform_init @ T_init
+        current_transform_def = current_transform_def @ T_def
+    
+    return p_init, p_def, s
+
 # Example usage
 if __name__ == "__main__":
-    # Example data - you would replace this with your actual data
-    
-    # Example initial and deformed shapes (3 x N arrays)
-    s = np.linspace(0, 16, 64)
-    # Initial shape (straight)
-    p_init = np.array([
-        np.zeros(64),  # x
-        np.zeros(64),  # y  
-        s              # z
-    ])
-    
-    # Deformed shape (curved)
-    p_def = np.array([
-        0.5 * np.sin(np.pi * s / 16),  # x - some bending
-        0.2 * s / 16,                   # y - slight offset
-        s                               # z - same length
-    ])
-    
-    # Example force distribution (3 x N array)
-    fx = 0.05 * np.sin(2 * np.pi * s / 16)
-    fy = 0.03 * np.cos(np.pi * s / 8)
-    fz = 0.02 * np.ones_like(s)
-    f_dist_data = np.array([fx, fy, fz])
-    
-    # Plot the robot
-    plot_robot_shapes(p_init, p_def, s, f_dist_data)
+    # Load data from 11_30_training.npz
+    try:
+        x_train, y_train = load_training_data("11_30_training.npz")
+        
+        # Select a random sample to visualize
+        sample_idx = np.random.randint(0, x_train.shape[0])
+        print(f"Visualizing sample {sample_idx}")
+        
+        # Get actuator data and force distribution for this sample
+        actuator_data = x_train[sample_idx]  # Shape: (12, 3)
+        force_data = y_train[sample_idx]     # Shape: (192, 3)
+        
+        # Print actuator information
+        print("\nActuator Data (Initial vs Final lengths):")
+        for seg in range(4):
+            print(f"  Segment {seg+1}:")
+            for act in range(3):
+                idx = seg*3 + act
+                initial = actuator_data[idx, 0]
+                final = actuator_data[idx, 1] 
+                diff = actuator_data[idx, 2]
+                print(f"    Actuator {act+1}: {initial:.3f} → {final:.3f} (Δ={diff:.3f})")
+        
+        # Calculate and display total deformation
+        total_deformation = np.sum(np.abs(actuator_data[:, 2]))
+        print(f"\nTotal actuator deformation magnitude: {total_deformation:.3f}")
+        print(f"Max force magnitude: {np.max(np.linalg.norm(force_data, axis=1)):.3f}")
+        print(f"Mean force magnitude: {np.mean(np.linalg.norm(force_data, axis=1)):.3f}")
+        
+        # Simulate robot shapes from actuator data
+        p_init, p_def, s = simulate_robot_from_actuators(actuator_data, n_points=64)
+        
+        # Interpolate force data to match robot discretization
+        s_force = np.linspace(0, 16, force_data.shape[0])  # Original force discretization (192 points)
+        force_interp = np.zeros((3, len(s)))
+        
+        print(f"Force data shape: {force_data.shape}")
+        print(f"s_force length: {len(s_force)}, s length: {len(s)}")
+        
+        for i in range(3):  # fx, fy, fz
+            force_interp[i] = np.interp(s, s_force, force_data[:, i])
+        
+        # Plot the robot
+        plot_robot_shapes(p_init, p_def, s, force_interp)
+        
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        print("Falling back to example data...")
+        
+        # Fallback to example data
+        s = np.linspace(0, 16, 64)
+        p_init = np.array([
+            np.zeros(64),  # x
+            np.zeros(64),  # y  
+            s              # z
+        ])
+        
+        p_def = np.array([
+            0.5 * np.sin(np.pi * s / 16),  # x - some bending
+            0.2 * s / 16,                   # y - slight offset
+            s                               # z - same length
+        ])
+        
+        fx = 0.05 * np.sin(2 * np.pi * s / 16)
+        fy = 0.03 * np.cos(np.pi * s / 8)
+        fz = 0.02 * np.ones_like(s)
+        f_dist_data = np.array([fx, fy, fz])
+        
+        plot_robot_shapes(p_init, p_def, s, f_dist_data)
