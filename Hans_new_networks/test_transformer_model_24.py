@@ -4,6 +4,11 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
+try:
+    from scipy.signal import find_peaks
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
 
 # Import the model classes from transfomer_model_24.py
 from transfomer_model_24 import DeformationToForceTransformer, PositionalEncoding
@@ -93,6 +98,53 @@ class TransformerModelLoader:
         
         return predictions
     
+    def find_peak(self, force_curve):
+        """Find the peak (point farthest from zero) in a force curve
+        
+        Args:
+            force_curve: 1D array of force values
+            
+        Returns:
+            tuple: (peak_index, peak_value) where peak is farthest from zero
+        """
+        abs_forces = np.abs(force_curve)
+        peak_idx = np.argmax(abs_forces)
+        peak_value = force_curve[peak_idx]
+        return peak_idx, peak_value
+    
+    def calculate_peak_differences(self, pred_forces, true_forces):
+        """Calculate peak differences for all force components
+        
+        Args:
+            pred_forces: (N, 3) array of predicted forces
+            true_forces: (N, 3) array of true forces
+            
+        Returns:
+            dict: Peak analysis results for each component
+        """
+        components = ['Fx', 'Fy', 'Fz']
+        peak_analysis = {}
+        
+        for i, comp in enumerate(components):
+            # Find peaks
+            pred_peak_idx, pred_peak_val = self.find_peak(pred_forces[:, i])
+            true_peak_idx, true_peak_val = self.find_peak(true_forces[:, i])
+            
+            # Calculate differences
+            x_diff = abs(pred_peak_idx - true_peak_idx)  # Position difference (absolute)
+            y_diff = abs(pred_peak_val - true_peak_val)  # Value difference
+            
+            peak_analysis[comp] = {
+                'pred_peak_idx': pred_peak_idx,
+                'pred_peak_val': pred_peak_val,
+                'true_peak_idx': true_peak_idx,
+                'true_peak_val': true_peak_val,
+                'x_diff': x_diff,
+                'y_diff': y_diff
+            }
+            
+        return peak_analysis
+    
     def evaluate_test_data(self, x_test, y_test=None, show_samples=5):
         """
         Evaluate model on test data
@@ -125,6 +177,24 @@ class TransformerModelLoader:
             mse_components = np.mean((predictions - y_test)**2, axis=(0, 1))
             mae_components = np.mean(np.abs(predictions - y_test), axis=(0, 1))
             
+            # Peak analysis for all samples
+            all_peak_diffs = []
+            for i in range(len(predictions)):
+                peak_analysis = self.calculate_peak_differences(predictions[i], y_test[i])
+                all_peak_diffs.append(peak_analysis)
+            
+            # Calculate average peak differences
+            avg_peak_diffs = {}
+            for comp in ['Fx', 'Fy', 'Fz']:
+                x_diffs = [pd[comp]['x_diff'] for pd in all_peak_diffs]
+                y_diffs = [pd[comp]['y_diff'] for pd in all_peak_diffs]
+                avg_peak_diffs[comp] = {
+                    'avg_x_diff': np.mean(x_diffs),
+                    'avg_y_diff': np.mean(y_diffs),
+                    'std_x_diff': np.std(x_diffs),
+                    'std_y_diff': np.std(y_diffs)
+                }
+            
             results.update({
                 'true_forces': y_test,
                 'mse': mse,
@@ -135,7 +205,8 @@ class TransformerModelLoader:
                 'mse_fz': mse_components[2],
                 'mae_fx': mae_components[0],
                 'mae_fy': mae_components[1],
-                'mae_fz': mae_components[2]
+                'mae_fz': mae_components[2],
+                'peak_analysis': avg_peak_diffs
             })
             
             print(f"\nEvaluation Results:")
@@ -144,11 +215,17 @@ class TransformerModelLoader:
             print(f"  Max Error: {max_error:.6f}")
             print(f"  Component MSE - Fx: {mse_components[0]:.6f}, Fy: {mse_components[1]:.6f}, Fz: {mse_components[2]:.6f}")
             print(f"  Component MAE - Fx: {mae_components[0]:.6f}, Fy: {mae_components[1]:.6f}, Fz: {mae_components[2]:.6f}")
+            
+            print(f"\nPeak Analysis (Average over all samples):")
+            for comp in ['Fx', 'Fy', 'Fz']:
+                x_diff = avg_peak_diffs[comp]['avg_x_diff']
+                y_diff = avg_peak_diffs[comp]['avg_y_diff']
+                print(f"  {comp} - Position diff: {x_diff:.2f}±{avg_peak_diffs[comp]['std_x_diff']:.2f}, Value diff: {y_diff:.4f}±{avg_peak_diffs[comp]['std_y_diff']:.4f}")
         
         return results
     
     def _visualize_random_sample(self, x_test, y_test):
-        """Visualize a single random sample prediction"""
+        """Visualize a single random sample prediction with peak detection"""
         import random
         
         # Select random sample
@@ -164,15 +241,40 @@ class TransformerModelLoader:
         mse = np.mean((prediction[0] - y_sample)**2)
         mae = np.mean(np.abs(prediction[0] - y_sample))
         
+        # Peak analysis for this sample
+        peak_analysis = self.calculate_peak_differences(prediction[0], y_sample)
+        
+        # Print peak analysis for this sample
+        print(f"\nPeak Analysis for Sample #{sample_idx + 1}:")
+        for comp in ['Fx', 'Fy', 'Fz']:
+            x_diff = peak_analysis[comp]['x_diff']
+            y_diff = peak_analysis[comp]['y_diff']
+            print(f"  {comp}: Position diff = {x_diff}, Value diff = {y_diff:.4f}")
+        
         # Create the plot
         fig, axes = plt.subplots(2, 3, figsize=(15, 8))
         fig.suptitle(f'Random Test Sample #{sample_idx + 1} - MSE: {mse:.6f}, MAE: {mae:.6f}', fontsize=14)
         
         for j, component in enumerate(['Fx', 'Fy', 'Fz']):
-            # Top row: Predictions vs True
+            # Top row: Predictions vs True with peaks marked
             axes[0, j].plot(prediction[0, :, j], label='Predicted', linewidth=2, color='blue', alpha=0.8)
             axes[0, j].plot(y_sample[:, j], label='True', linewidth=2, color='red', alpha=0.8)
-            axes[0, j].set_title(f'{component}')
+            
+            # Mark peaks
+            pred_peak_idx = peak_analysis[component]['pred_peak_idx']
+            pred_peak_val = peak_analysis[component]['pred_peak_val']
+            true_peak_idx = peak_analysis[component]['true_peak_idx']
+            true_peak_val = peak_analysis[component]['true_peak_val']
+            
+            axes[0, j].plot(pred_peak_idx, pred_peak_val, 'bo', markersize=8, label='Pred Peak')
+            axes[0, j].plot(true_peak_idx, true_peak_val, 'ro', markersize=8, label='True Peak')
+            
+            # Add peak difference to legend
+            x_diff = peak_analysis[component]['x_diff']
+            y_diff = peak_analysis[component]['y_diff']
+            peak_info = f'Δx={x_diff}, Δy={y_diff:.4f}'
+            
+            axes[0, j].set_title(f'{component} - {peak_info}')
             axes[0, j].set_xlabel('Position along robot')
             axes[0, j].set_ylabel(f'{component} (N)')
             axes[0, j].legend()
@@ -244,40 +346,40 @@ def load_test_data(npz_file_path="12_1_testing_hans33.npz"):
     
     return x_data, y_data
 
-def create_synthetic_test_case():
-    """Create a synthetic test case for demonstration"""
-    print("Creating synthetic test case...")
+# def create_synthetic_test_case():
+#     """Create a synthetic test case for demonstration"""
+#     print("Creating synthetic test case...")
     
-    # Create actuator data: small deformations
-    x_test = np.zeros((1, 12, 3))  # Single sample
+#     # Create actuator data: small deformations
+#     x_test = np.zeros((1, 12, 3))  # Single sample
     
-    # Set initial lengths (all equal - straight robot)
-    x_test[0, :, 0] = 4.0  # Initial lengths
+#     # Set initial lengths (all equal - straight robot)
+#     x_test[0, :, 0] = 4.0  # Initial lengths
     
-    # Create some deformation (bend the robot)
-    for seg in range(4):
-        for act in range(3):
-            idx = seg*3 + act
-            # Create bending: actuator 0 gets shorter, actuator 2 gets longer
-            if act == 0:
-                deformation = -0.2 * (seg + 1) / 4  # Progressive bending
-            elif act == 2:
-                deformation = 0.2 * (seg + 1) / 4
-            else:
-                deformation = 0.0
+#     # Create some deformation (bend the robot)
+#     for seg in range(4):
+#         for act in range(3):
+#             idx = seg*3 + act
+#             # Create bending: actuator 0 gets shorter, actuator 2 gets longer
+#             if act == 0:
+#                 deformation = -0.2 * (seg + 1) / 4  # Progressive bending
+#             elif act == 2:
+#                 deformation = 0.2 * (seg + 1) / 4
+#             else:
+#                 deformation = 0.0
             
-            x_test[0, idx, 1] = x_test[0, idx, 0] + deformation  # Deformed length
-            x_test[0, idx, 2] = deformation  # Difference
+#             x_test[0, idx, 1] = x_test[0, idx, 0] + deformation  # Deformed length
+#             x_test[0, idx, 2] = deformation  # Difference
     
-    print("Synthetic test case created:")
-    for seg in range(4):
-        print(f"  Segment {seg+1}:")
-        for act in range(3):
-            idx = seg*3 + act
-            initial, deformed, diff = x_test[0, idx, :]
-            print(f"    Act {act+1}: {initial:.3f} → {deformed:.3f} (Δ={diff:.3f})")
+#     print("Synthetic test case created:")
+#     for seg in range(4):
+#         print(f"  Segment {seg+1}:")
+#         for act in range(3):
+#             idx = seg*3 + act
+#             initial, deformed, diff = x_test[0, idx, :]
+#             print(f"    Act {act+1}: {initial:.3f} → {deformed:.3f} (Δ={diff:.3f})")
     
-    return x_test
+#     return x_test
 
 if __name__ == "__main__":
     # Try to find the best available model file
@@ -333,6 +435,24 @@ if __name__ == "__main__":
         
         print(f"Overall Test MSE: {overall_mse:.6f}")
         print(f"Overall Test MAE: {overall_mae:.6f}")
+        
+        # Calculate overall peak analysis
+        print("\nCalculating peak analysis...")
+        overall_peak_diffs = []
+        for i in range(len(predictions)):
+            peak_analysis = loader.calculate_peak_differences(predictions[i], y_subset[i])
+            overall_peak_diffs.append(peak_analysis)
+        
+        # Calculate and display average peak differences
+        print("\nOverall Peak Analysis:")
+        for comp in ['Fx', 'Fy', 'Fz']:
+            x_diffs = [pd[comp]['x_diff'] for pd in overall_peak_diffs]
+            y_diffs = [pd[comp]['y_diff'] for pd in overall_peak_diffs]
+            avg_x_diff = np.mean(x_diffs)
+            avg_y_diff = np.mean(y_diffs)
+            std_x_diff = np.std(x_diffs)
+            std_y_diff = np.std(y_diffs)
+            print(f"  {comp} - Avg Position Diff: {avg_x_diff:.2f}±{std_x_diff:.2f}, Avg Value Diff: {avg_y_diff:.4f}±{std_y_diff:.4f}")
         
         # Create the two plots
         print("\nGenerating plots...")
